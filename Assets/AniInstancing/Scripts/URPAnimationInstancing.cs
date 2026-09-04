@@ -68,8 +68,8 @@ public class URPAnimationInstancing : MonoBehaviour
         public SkinnedMeshRenderer[] skinnedMeshRenderer;
         public MeshRenderer[] meshRenderer;
         public MeshFilter[] meshFilter;
-        public AnimationInstancingMgr.VertexCache[] vertexCacheList;
-        public AnimationInstancingMgr.MaterialBlock[] materialBlockList;
+        public AnimationInstancingManager.VertexCache[] vertexCacheList;
+        public AnimationInstancingManager.MaterialBlock[] materialBlockList;
     }
     [NonSerialized]
     public LodInfo[] lodInfo;
@@ -84,7 +84,7 @@ public class URPAnimationInstancing : MonoBehaviour
 
     void Start()
     {
-        if (!AnimationInstancingMgr.Instance.UseInstancing)
+        if (!AnimationInstancingManager.Instance.UseInstancing)
         {
             gameObject.SetActive(false);
             return;
@@ -121,8 +121,8 @@ public class URPAnimationInstancing : MonoBehaviour
 
                 LodInfo info = new LodInfo();
                 info.lodLevel = i;
-                info.vertexCacheList = new AnimationInstancingMgr.VertexCache[lods[i].renderers.Length];
-                info.materialBlockList = new AnimationInstancingMgr.MaterialBlock[info.vertexCacheList.Length];
+                info.vertexCacheList = new AnimationInstancingManager.VertexCache[lods[i].renderers.Length];
+                info.materialBlockList = new AnimationInstancingManager.MaterialBlock[info.vertexCacheList.Length];
                 List<SkinnedMeshRenderer> listSkinnedMeshRenderer = new List<SkinnedMeshRenderer>();
                 List<MeshRenderer> listMeshRenderer = new List<MeshRenderer>();
                 foreach (var render in lods[i].renderers)
@@ -151,8 +151,8 @@ public class URPAnimationInstancing : MonoBehaviour
             info.skinnedMeshRenderer = GetComponentsInChildren<SkinnedMeshRenderer>();
             info.meshRenderer = GetComponentsInChildren<MeshRenderer>();
             info.meshFilter = GetComponentsInChildren<MeshFilter>();
-            info.vertexCacheList = new AnimationInstancingMgr.VertexCache[info.skinnedMeshRenderer.Length + info.meshRenderer.Length];
-            info.materialBlockList = new AnimationInstancingMgr.MaterialBlock[info.vertexCacheList.Length];
+            info.vertexCacheList = new AnimationInstancingManager.VertexCache[info.skinnedMeshRenderer.Length + info.meshRenderer.Length];
+            info.materialBlockList = new AnimationInstancingManager.MaterialBlock[info.vertexCacheList.Length];
             lodInfo[0] = info;
 
             for (int j = 0; j != info.meshRenderer.Length; ++j)
@@ -166,23 +166,23 @@ public class URPAnimationInstancing : MonoBehaviour
         }
         UnityEngine.Profiling.Profiler.EndSample();
 
-        if (AnimationInstancingMgr.Instance.UseInstancing
+        if (AnimationInstancingManager.Instance.UseInstancing
             && animator != null)
         {
             animator.enabled = false;
         }
         visible = true;
         CalcBoundingSphere();
-        AnimationInstancingMgr.Instance.AddBoundingSphere(this);
-        AnimationInstancingMgr.Instance.AddInstance(gameObject);
+        AnimationInstancingManager.Instance.AddBoundingSphere(this);
+        AnimationInstancingManager.Instance.AddInstance(gameObject);
     }
 
 
     private void OnDestroy()
     {
-        if (!AnimationInstancingMgr.IsDestroy())
+        if (!AnimationInstancingManager.IsDestroy())
         {
-            AnimationInstancingMgr.Instance.RemoveInstance(this);
+            AnimationInstancingManager.Instance.RemoveInstance(this);
         }
         if (parentInstance != null)
         {
@@ -231,7 +231,7 @@ public class URPAnimationInstancing : MonoBehaviour
         {
             // This is only a MeshRenderer, it has no animations.
             isMeshRender = true;
-			AnimationInstancingMgr.Instance.AddMeshVertex(prototype.name,
+			AnimationInstancingManager.Instance.AddMeshVertex(prototype.name,
                 lodInfo,
                 null,
                 null,
@@ -279,7 +279,7 @@ public class URPAnimationInstancing : MonoBehaviour
         }
         
 
-		AnimationInstancingMgr.Instance.AddMeshVertex(prototype.name,
+		AnimationInstancingManager.Instance.AddMeshVertex(prototype.name,
             lodInfo,
             allTransforms,
             bindPose,
@@ -583,7 +583,7 @@ public class URPAnimationInstancing : MonoBehaviour
         }
 
         attachment.parentInstance = this;
-        AnimationInstancingMgr.VertexCache parentCache = AnimationInstancingMgr.Instance.FindVertexCache(lodInfo[0].skinnedMeshRenderer[0].name.GetHashCode());
+        AnimationInstancingManager.VertexCache parentCache = AnimationInstancingManager.Instance.FindVertexCache(lodInfo[0].skinnedMeshRenderer[0].name.GetHashCode());
         listAttachment.Add(attachment);
         
         int nameCode = boneName.GetHashCode();
@@ -594,9 +594,9 @@ public class URPAnimationInstancing : MonoBehaviour
             int skinnedMeshRenderCount = attachment.lodInfo[0].skinnedMeshRenderer.Length;
             nameCode += skinnedMeshRenderCount > 0? attachment.lodInfo[0].skinnedMeshRenderer[0].name.GetHashCode(): 0;
         }
-        AnimationInstancingMgr.VertexCache cache = AnimationInstancingMgr.Instance.FindVertexCache(nameCode);
+        AnimationInstancingManager.VertexCache cache = AnimationInstancingManager.Instance.FindVertexCache(nameCode);
 
-		AnimationInstancingMgr.Instance.AddMeshVertex(attachment.prototype.name,
+		AnimationInstancingManager.Instance.AddMeshVertex(attachment.prototype.name,
                     attachment.lodInfo,
                     null,
                     null,
@@ -623,8 +623,8 @@ public class URPAnimationInstancing : MonoBehaviour
                 }
                 Debug.Assert(cache.boneTextureIndex < 0 || cache.boneIndex[0].x != index);
 
-                AnimationInstancingMgr.Instance.BindAttachment(parentCache, cache, info.meshFilter[j].sharedMesh, index);
-                AnimationInstancingMgr.Instance.SetupAdditionalData(cache);
+                AnimationInstancingManager.Instance.BindAttachment(parentCache, cache, info.meshFilter[j].sharedMesh, index);
+                AnimationInstancingManager.Instance.SetupAdditionalData(cache);
                 cache.boneTextureIndex = parentCache.boneTextureIndex;
             }
         }
@@ -656,7 +656,7 @@ public class URPAnimationInstancing : MonoBehaviour
                 for (int j = 0; j != info.meshRenderer.Length; ++j)
                 {
                     //MeshRenderer render = info.meshRenderer[j];
-                    AnimationInstancingMgr.VertexCache cache = info.vertexCacheList[info.skinnedMeshRenderer.Length + j];
+                    AnimationInstancingManager.VertexCache cache = info.vertexCacheList[info.skinnedMeshRenderer.Length + j];
                     cache.boneTextureIndex = index;
                 }
             }

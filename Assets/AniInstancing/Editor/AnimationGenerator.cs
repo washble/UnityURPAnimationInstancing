@@ -41,7 +41,7 @@ namespace AnimationInstancing
             public int layer;
             public AnimationInfo info;
         }
-        private Dictionary<int, AnimationInstancingMgr.VertexCache> generateVertexCachePool;
+        private Dictionary<int, AnimationInstancingManager.VertexCache> generateVertexCachePool;
         private Dictionary<int, ArrayList> generateMatrixDataPool;
         private GenerateOjbectInfo[] generateObjectData;
         private List<AnimationBakeInfo> generateInfo;
@@ -69,7 +69,7 @@ namespace AnimationInstancing
             cacheTransition = new Dictionary<UnityEditor.Animations.AnimatorState, UnityEditor.Animations.AnimatorStateTransition[]>();
             cacheAnimationEvent = new Dictionary<AnimationClip, UnityEngine.AnimationEvent[]>();
             generatedPrefab = null;
-            generateVertexCachePool = new Dictionary<int, AnimationInstancingMgr.VertexCache>();
+            generateVertexCachePool = new Dictionary<int, AnimationInstancingManager.VertexCache>();
             generateMatrixDataPool = new Dictionary<int, ArrayList>();
             generateObjectData = new GenerateOjbectInfo[BakeFrameCount];
             for (int i = 0; i != generateObjectData.Length; ++i)
@@ -782,7 +782,7 @@ namespace AnimationInstancing
             bool rootMotion)
         {
             UnityEngine.Profiling.Profiler.BeginSample("AddBoneMatrix()");
-            AnimationInstancingMgr.VertexCache vertexCache = null;
+            AnimationInstancingManager.VertexCache vertexCache = null;
             bool find = generateVertexCachePool.TryGetValue(nameCode, out vertexCache);
             if (!find)
                 return;
@@ -848,7 +848,7 @@ namespace AnimationInstancing
                 if (generateVertexCachePool.ContainsKey(nameCode))
                     continue;
 
-                AnimationInstancingMgr.VertexCache vertexCache = new AnimationInstancingMgr.VertexCache();
+                AnimationInstancingManager.VertexCache vertexCache = new AnimationInstancingManager.VertexCache();
                 generateVertexCachePool[nameCode] = vertexCache;
                 vertexCache.nameCode = nameCode;
                 vertexCache.bonePose = boneTransform;

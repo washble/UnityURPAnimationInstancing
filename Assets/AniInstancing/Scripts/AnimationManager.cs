@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-public class AnimationManager : Singleton<AnimationManager>
+public class AnimationManager : AnimationInstancingSingleton<AnimationManager>
 {
     // A request to create animation info, because we use async method
     struct CreateAnimationRequest 
@@ -33,11 +33,12 @@ public class AnimationManager : Singleton<AnimationManager>
 
     public static AnimationManager GetInstance()
     {
-        return Singleton<AnimationManager>.Instance;
+        return Instance;
     }
 
-    private void Awake()
+    protected override void Awake()
     {
+        base.Awake();
         m_animationInfo = new Dictionary<GameObject, InstanceAnimationInfo>();
         m_requestList = new List<CreateAnimationRequest>();
     }
@@ -130,7 +131,7 @@ public class AnimationManager : Singleton<AnimationManager>
             info = new InstanceAnimationInfo();
             info.listAniInfo = ReadAnimationInfo(reader);
             info.extraBoneInfo = ReadExtraBoneInfo(reader);
-            AnimationInstancingMgr.Instance.ImportAnimationTexture(request.prefab.name, reader);
+            AnimationInstancingManager.Instance.ImportAnimationTexture(request.prefab.name, reader);
             request.instance.Prepare(info.listAniInfo, info.extraBoneInfo);
             m_animationInfo.Add(request.prefab, info);
         }
@@ -155,7 +156,7 @@ public class AnimationManager : Singleton<AnimationManager>
         info.listAniInfo = ReadAnimationInfo(reader);
         info.extraBoneInfo = ReadExtraBoneInfo(reader);
         m_animationInfo.Add(prefab, info);
-        AnimationInstancingMgr.Instance.ImportAnimationTexture(prefab.name, reader);
+        AnimationInstancingManager.Instance.ImportAnimationTexture(prefab.name, reader);
         file.Close();
 #elif UNITY_IPHONE
 		path = "file://" + Application.dataPath +"/Raw/AnimationTexture/";

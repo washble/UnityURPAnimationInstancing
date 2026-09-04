@@ -40,12 +40,12 @@ Shader "Custom/URPAnimationLitShader"
         	
             Blend SrcAlpha OneMinusSrcAlpha
 			ZWrite On
-			ZTest Less
+			ZTest LEqual
 			Cull Back
             
             HLSLPROGRAM
 			#pragma exclude_renderers gles gles3 glcore
-			#pragma target 2.0
+			#pragma target 3.0
 
             // Universal Pipeline keywords
 			#pragma shader_feature_local _ _MAIN_LIGHT_SHADOWS
@@ -104,7 +104,7 @@ Shader "Custom/URPAnimationLitShader"
             	float3 viewDirection : TEXCOORD2;
             	float3 normal   : NORMAL;
                 float3 tangent  : TEXCOORD3;
-                float3 biTangent    : TEXCOOORD4;
+                float3 biTangent    : TEXCOORD4;
             	float4 shadowCoord  : TEXCOORD5;
             	float4 fogCoord : TEXCOORD6;
             };
@@ -119,10 +119,10 @@ Shader "Custom/URPAnimationLitShader"
                 o.vertex = TransformObjectToHClip(v.vertex.xyz);
                 o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
                 o.worldPosition = TransformObjectToWorld(v.vertex.xyz);
-            	o.normal = TransformObjectToWorldNormal(v.normal);
+				o.normal = normalize(TransformObjectToWorldNormal(v.normal));
             	o.viewDirection = normalize(_WorldSpaceCameraPos.xyz - o.worldPosition.xyz);
-                o.tangent = TransformObjectToWorldDir(v.tangent.xyz);
-                o.biTangent = cross(o.normal, o.tangent) * v.tangent.w;
+				o.tangent = normalize(TransformObjectToWorldDir(v.tangent.xyz));
+				o.biTangent = normalize(cross(o.normal, o.tangent)) * v.tangent.w;
             	o.shadowCoord = TransformWorldToShadowCoord(o.worldPosition);
             	o.fogCoord = ComputeFogFactor(o.vertex.z);
                 
@@ -131,8 +131,8 @@ Shader "Custom/URPAnimationLitShader"
 
             half3 AdditionalLighting(Light light, half3 normalWS)
 			{
-				half dotNL = dot(normalWS, light.direction) * 0.5 + 0.5;
-				return light.color * dotNL * light.distanceAttenuation * light.shadowAttenuation;
+				half3 attenuatedLightColor = light.color * (light.distanceAttenuation * light.shadowAttenuation);
+				return LightingLambert(attenuatedLightColor, light.direction, normalWS);
 			}
 
             half3 GetSafeNormalize(half3 lightDirection, half3 viewDirection)
@@ -144,14 +144,9 @@ Shader "Custom/URPAnimationLitShader"
             {
 				half4 color = _MainTex.Sample(sampler_MainTex, i.uv) * _Color;
 
-            	#if defined(_EMISSION_ON)
-            		half3 emission = tex2Dlod(sampler_EmissionMap, float4(i.uv, 0, 1)).rgb;
-            		color.rgb += emission * _EmissionColor;
-				#endif
-            	
-            	float3 NormalTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, i.uv));
+				float3 NormalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, i.uv), _NormalScale);
                 float3x3 tbnMatrix = float3x3(i.tangent, i.biTangent, i.normal);
-                float3 normalWS = normalize(mul(NormalTS, tbnMatrix)) * _NormalScale;
+                float3 normalWS = normalize(mul(NormalTS, tbnMatrix));
 
 				Light mainLight = GetMainLight(i.shadowCoord);
             	half3 lighting = AdditionalLighting(mainLight, normalWS);
@@ -164,7 +159,7 @@ Shader "Custom/URPAnimationLitShader"
             		specColor += spec * mainLight.color;
 				#endif
 
-            	half3 addLingting = 0;
+				half3 addLighting = 0;
             	int additionalLightsCount = GetAdditionalLightsCount();
 				for (int index = 0; index < additionalLightsCount; ++index)
                 {
@@ -177,18 +172,20 @@ Shader "Custom/URPAnimationLitShader"
 						specColor += pow(spec, _Smoothness) * addLight.color;
 					#endif
 					
-                    addLingting += addLightResult;
+					addLighting += addLightResult;
                 }
 
-				color = float4(color.rgb * lighting, color.a);
-            	color.rgb += specColor + addLingting;
-            	
+                half3 ambient = 0;
             	#if defined(_AMBIENT_ON)
-					half3 ambient = SampleSH(normalWS);
-            		half3 hv = GetSafeNormalize(mainLight.direction, i.viewDirection);
-            		float NdotH = saturate(dot(hv, normalize(normalWS)));
-            		color.rgb += ambient * (1.0 * NdotH) * _EnviIntensity;
+					ambient = SampleSH(normalWS) * _EnviIntensity;
             	#endif
+
+				color.rgb = color.rgb * (lighting + addLighting + ambient) + specColor;
+
+            	#if defined(_EMISSION_ON)
+                half3 emission = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, i.uv).rgb;
+					color.rgb += emission * _EmissionColor;
+				#endif
             	
             	color.rgb = MixFog(color.rgb, i.fogCoord.x);
             	
@@ -210,7 +207,7 @@ Shader "Custom/URPAnimationLitShader"
             HLSLPROGRAM
 
             #pragma exclude_renderers gles gles3 glcore
-            #pragma target 2.0
+            #pragma target 3.0
 
             // -------------------------------------
 			// Material Keywords
@@ -268,10 +265,10 @@ Shader "Custom/URPAnimationLitShader"
 
 			HLSLPROGRAM
 			#pragma exclude_renderers gles gles3 glcore
-			#pragma target 2.0
+			#pragma target 3.0
 
-			#pragma vertex DepthOnlyVertex
-			#pragma fragment DepthOnlyFragment
+			#pragma vertex DepthOnlyVertexInstanced
+			#pragma fragment DepthOnlyFragmentInstanced
 
 			// -------------------------------------
 			// Material Keywords
@@ -283,8 +280,34 @@ Shader "Custom/URPAnimationLitShader"
 			#pragma multi_compile_instancing
 			#pragma multi_compile _ DOTS_INSTANCING_ON
 
-			#include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-			#include "Packages/com.unity.render-pipelines.universal/Shaders/DepthOnlyPass.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "URPAnimationInstancingBaseCustom.hlsl"
+
+			struct DepthOnlyVaryings
+			{
+				float4 positionCS : SV_POSITION;
+				UNITY_VERTEX_INPUT_INSTANCE_ID
+				UNITY_VERTEX_OUTPUT_STEREO
+			};
+
+			DepthOnlyVaryings DepthOnlyVertexInstanced(appdata v)
+			{
+				DepthOnlyVaryings o = (DepthOnlyVaryings)0;
+				UNITY_SETUP_INSTANCE_ID(v);
+				UNITY_TRANSFER_INSTANCE_ID(v, o);
+				UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+
+				vert(v);
+				o.positionCS = TransformObjectToHClip(v.vertex.xyz);
+				return o;
+			}
+
+			half DepthOnlyFragmentInstanced(DepthOnlyVaryings i) : SV_TARGET
+			{
+				UNITY_SETUP_INSTANCE_ID(i);
+				UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+				return i.positionCS.z;
+			}
 			
 			ENDHLSL
 		}
