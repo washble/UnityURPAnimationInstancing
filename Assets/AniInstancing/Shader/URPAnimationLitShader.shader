@@ -124,13 +124,15 @@ Shader "AnimationInstancing/URPAnimationLitShader"
                 float3 biTangent    : TEXCOORD4;
             	float4 shadowCoord  : TEXCOORD5;
             	float4 fogCoord : TEXCOORD6;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             v2f vertn (appdata v)
             {
                 v2f o;
-            	
+
                 UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
 
             	vert(v);
                 o.vertex = TransformObjectToHClip(v.vertex.xyz);
@@ -176,6 +178,7 @@ Shader "AnimationInstancing/URPAnimationLitShader"
             
             float4 frag (v2f i) : SV_Target
             {
+                UNITY_SETUP_INSTANCE_ID(i);
                 half4 albedoAlpha = SampleAlbedoAlpha(i.uv, TEXTURE2D_ARGS(_BaseMap, sampler_BaseMap));
                 SurfaceData surfaceData = (SurfaceData)0;
                 surfaceData.alpha = albedoAlpha.a * _BaseColor.a;

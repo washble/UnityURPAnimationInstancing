@@ -21,7 +21,7 @@ public class EventReceiver : MonoBehaviour {
 		
 	}
 
-    static string log = "Receive Event";
+    // static string log = "Receive Event";
     public void NewEvent(AnimationEvent evt)
     {
         //Debug.Log(log);

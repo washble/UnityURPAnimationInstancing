@@ -31,6 +31,14 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
         public int instancingCount;
         public int size;
         public MaterialPropertyBlock propertyBlock;
+
+        // Ordered to match this package's matrix and animation-data slots.
+        public List<Vector3> probePositions;
+        public List<SphericalHarmonicsL2> probeCoefficients;
+        public List<Vector4> probeOcclusion;
+        public Vector3[] lastProbePositions;
+        public int lastProbeDataCount = -1;
+        public int lightProbeVersion = -1;
     }
     public class MaterialBlock
     {
@@ -80,6 +88,8 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
         set { instancingPackageSize = value; }
     }
     private List<AnimationTexture> animationTextureList = new List<AnimationTexture>();
+    private int lightProbeVersion;
+    private const float LightProbePositionChangeSqrThreshold = 0.0001f;
 
     [SerializeField]
     private bool useInstancing = true;
@@ -104,14 +114,17 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
         InitializeCullingGroup();
         cameraTransform = Camera.main.transform;
         aniInstancingList = new List<URPAnimationInstancing>(1000);
+#if !UNITY_2023_1_OR_NEWER
         if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES2)
         {
             instancingPackageSize = 1;
             UseInstancing = false;
         }
+#endif
 
 		vertexCachePool = new Dictionary<int, VertexCache>();
 		instanceDataPool = new Dictionary<int, InstanceData>();
+        LightProbes.lightProbesUpdated += OnLightProbesUpdated;
     }
 
     private void Start()
@@ -150,6 +163,8 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
                         InstancingPackage package = packageList[k][i];
                         if (package.instancingCount == 0)
                             continue;
+
+                        UpdateLightProbeData(package);
                         for (int j = 0; j != package.subMeshCount; ++j)
                         {
                             InstanceData data = block.Value.instanceData; 
@@ -169,7 +184,10 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
                                     package.propertyBlock,
                                     vertexCache.shadowcastingMode,
                                     vertexCache.receiveShadow,
-                                    vertexCache.layer);
+                                    vertexCache.layer,
+                                    null,
+                                    LightProbeUsage.CustomProvided,
+                                    null);
                             }
                             else
                             {
@@ -185,6 +203,7 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
                             }
                         }
                         package.instancingCount = 0;
+                        package.probePositions.Clear();
                     }
                     block.Value.runtimePackageIndex[k] = 0;
                 }
@@ -209,6 +228,54 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
 //                 }
 //                 vertexCache.currentInstancingIndex = 0;
         }
+    }
+
+    private static void SetProbePosition(InstancingPackage package, int index, Vector4 worldPosition)
+    {
+        Vector3 position = new Vector3(worldPosition.x, worldPosition.y, worldPosition.z);
+        SetListCount(package.probePositions, index + 1);
+        package.probePositions[index] = position;
+    }
+
+    private static void SetListCount<T>(List<T> values, int count)
+    {
+        while (values.Count < count)
+            values.Add(default(T));
+        if (values.Count > count)
+            values.RemoveRange(count, values.Count - count);
+    }
+
+    private void UpdateLightProbeData(InstancingPackage package)
+    {
+        int count = package.instancingCount;
+        SetListCount(package.probePositions, count);
+        bool probeDataChanged = package.lightProbeVersion != lightProbeVersion || package.lastProbeDataCount != count;
+        for (int i = 0; i < count; ++i)
+        {
+            if ((package.lastProbePositions[i] - package.probePositions[i]).sqrMagnitude > LightProbePositionChangeSqrThreshold)
+            {
+                probeDataChanged = true;
+                break;
+            }
+        }
+
+        if (!probeDataChanged)
+            return;
+
+        SetListCount(package.probeCoefficients, count);
+        SetListCount(package.probeOcclusion, count);
+        LightProbes.CalculateInterpolatedLightAndOcclusionProbes(
+            package.probePositions,
+            package.probeCoefficients,
+            package.probeOcclusion);
+        package.propertyBlock.CopySHCoefficientArraysFrom(package.probeCoefficients, 0, 0, count);
+        package.propertyBlock.CopyProbeOcclusionArrayFrom(package.probeOcclusion, 0, 0, count);
+
+        for (int i = 0; i < count; ++i)
+            package.lastProbePositions[i] = package.probePositions[i];
+
+        package.lastProbeDataCount = count;
+        package.lightProbeVersion = lightProbeVersion;
     }
 
     public void Clear()
@@ -273,9 +340,15 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
 
     void OnDisable()
     {
+        LightProbes.lightProbesUpdated -= OnLightProbesUpdated;
         ReleaseBuffer();
         cullingGroup.Dispose();
         cullingGroup = null;
+    }
+
+    private void OnLightProbesUpdated()
+    {
+        ++lightProbeVersion;
     }
 
 #if !UNITY_ANDROID && !UNITY_IPHONE
@@ -393,6 +466,7 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
                         arrayMat[count].m31 = worldMat.m31;
                         arrayMat[count].m32 = worldMat.m32;
                         arrayMat[count].m33 = worldMat.m33;
+                        SetProbePosition(pkg, count, worldMat.GetColumn(3));
                         float frameIndex = 0, preFrameIndex = -1, transition = 0f;
                         if (instance.parentInstance != null)
                         {
@@ -495,11 +569,13 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
     private void ReadTexture(BinaryReader reader, string prefabName)
     {
         TextureFormat format = TextureFormat.RGBAHalf;
+#if !UNITY_2023_1_OR_NEWER
         if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.OpenGLES2)
         {
             //todo
             format = TextureFormat.RGBA32;
         }
+#endif
         int count = reader.ReadInt32();
         int blockWidth = reader.ReadInt32();
         int blockHeight = reader.ReadInt32();
@@ -550,6 +626,10 @@ public class AnimationInstancingManager : AnimationInstancingSingleton<Animation
         package.material = new Material[mesh.subMeshCount];
         package.subMeshCount = mesh.subMeshCount;
         package.size = 1;
+        package.probePositions = new List<Vector3>(instancingPackageSize);
+        package.probeCoefficients = new List<SphericalHarmonicsL2>(instancingPackageSize);
+        package.probeOcclusion = new List<Vector4>(instancingPackageSize);
+        package.lastProbePositions = new Vector3[instancingPackageSize];
         for (int i = 0; i != mesh.subMeshCount; ++i)
         {
             package.material[i] = new Material(originalMaterial[i]);
