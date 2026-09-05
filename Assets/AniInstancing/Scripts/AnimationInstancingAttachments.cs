@@ -23,6 +23,7 @@ public sealed class AnimationInstancingAttachments : MonoBehaviour
     [SerializeField] private List<AttachmentEntry> attachments = new List<AttachmentEntry>();
 
     private readonly List<GameObject> spawnedAttachments = new List<GameObject>();
+    private readonly List<Mesh> spawnedAttachmentMeshes = new List<Mesh>();
 
     private void Awake()
     {
@@ -65,6 +66,7 @@ public sealed class AnimationInstancingAttachments : MonoBehaviour
                 continue;
             }
 
+            Vector3 authoredScale = entry.AttachObject.transform.localScale;
             GameObject attachmentObject = AnimationInstancingManager.Instance.CreateInstance(entry.AttachObject);
             URPAnimationInstancing attachmentInstance = attachmentObject.GetComponent<URPAnimationInstancing>();
             if (attachmentInstance == null)
@@ -74,7 +76,9 @@ public sealed class AnimationInstancingAttachments : MonoBehaviour
                 continue;
             }
 
+            CreateScaledRuntimeMeshes(attachmentObject, authoredScale);
             attachmentObject.transform.SetPositionAndRotation(transform.position, transform.rotation);
+            attachmentObject.transform.localScale = Vector3.one;
             attachmentObject.SetActive(true);
             spawnedAttachments.Add(attachmentObject);
             pendingAttachments.Add(new PendingAttachment(entry.AttachPointName, attachmentInstance));
@@ -96,6 +100,33 @@ public sealed class AnimationInstancingAttachments : MonoBehaviour
         {
             if (spawnedAttachments[i] != null)
                 Destroy(spawnedAttachments[i]);
+        }
+
+        for (int i = 0; i < spawnedAttachmentMeshes.Count; ++i)
+        {
+            if (spawnedAttachmentMeshes[i] != null)
+                Destroy(spawnedAttachmentMeshes[i]);
+        }
+    }
+
+    private void CreateScaledRuntimeMeshes(GameObject attachmentObject, Vector3 authoredScale)
+    {
+        MeshFilter[] meshFilters = attachmentObject.GetComponentsInChildren<MeshFilter>(true);
+        for (int i = 0; i < meshFilters.Length; ++i)
+        {
+            Mesh sourceMesh = meshFilters[i].sharedMesh;
+            if (sourceMesh == null)
+                continue;
+
+            Mesh runtimeMesh = Instantiate(sourceMesh);
+            Vector3[] vertices = runtimeMesh.vertices;
+            for (int j = 0; j < vertices.Length; ++j)
+                vertices[j] = Vector3.Scale(vertices[j], authoredScale);
+
+            runtimeMesh.vertices = vertices;
+            runtimeMesh.RecalculateBounds();
+            meshFilters[i].sharedMesh = runtimeMesh;
+            spawnedAttachmentMeshes.Add(runtimeMesh);
         }
     }
 
