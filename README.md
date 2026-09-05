@@ -7,6 +7,7 @@ I am working on improving Unity Animation Instancing to be available in URP.
 * **Animation Instancing Repository:** [Unity-Technologies/Animation-Instancing](https://github.com/Unity-Technologies/Animation-Instancing?utm_source=chatgpt.com)
 * **Unity Blog — Animation Instancing for SkinnedMeshRenderer:** [What is an Animation Instancing? Watch Unity Explain](https://blog.unity.com/engine-platform/animation-instancing-for-skinnedmeshrenderer?utm_source=chatgpt.com)
 
+
 ## Environment
 
 * **Unity:** 6000.3.11f1
@@ -73,3 +74,20 @@ Animation Instancing is used to reduce the rendering cost of multiple animated c
 > Solve lighting/probe issues primarily through the shader/rendering-data path without sacrificing GPU instancing.
 > Any Material change must account for all relevant Renderer Types.
 > Light Probe / Reflection Probe behavior must be experimentally verified before being considered stable.
+
+## Spawn
+
+For Animation Instancing-based spawning, follow the spawn flow in `AnimationInstancingCloneSpawner.cs`.
+
+```csharp
+// 1. Create the clone through the Animation Instancing Manager
+GameObject clone = manager.CreateInstance(template.gameObject);
+
+// 2. URPAnimationInstancing on the clone handles Manager registration
+//    (AddBoundingSphere / AddInstance)
+```
+
+**Key flow:**
+
+`Template → Animation Instancing Manager → CreateInstance → URPAnimationInstancing registration`
+
