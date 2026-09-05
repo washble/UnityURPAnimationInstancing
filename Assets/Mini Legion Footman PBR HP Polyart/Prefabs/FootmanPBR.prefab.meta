@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 705458a9eac3ae740932e6aa33f3ca89
+timeCreated: 1565703882
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 86576
+  packageName: Mini Legion Footman HP PBR
+  packageVersion: 1.3
+  assetPath: Assets/Mini Legion Footman PBR HP Polyart/Prefabs/FootmanPBR.prefab
+  uploadId: 347255

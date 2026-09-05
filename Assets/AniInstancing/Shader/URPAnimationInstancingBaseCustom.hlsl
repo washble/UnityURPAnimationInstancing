@@ -9,6 +9,8 @@ Texture2D _MainTex;
 Texture2D _NormalMap;
 SamplerState sampler_MainTex;
 SamplerState sampler_NormalMap;
+TEXTURE2D(_MetallicGlossMap);   SAMPLER(sampler_MetallicGlossMap);
+TEXTURE2D(_OcclusionMap);       SAMPLER(sampler_OcclusionMap);
 
 CBUFFER_START(UnityPerMaterial)
 
@@ -16,11 +18,16 @@ float4 _MainTex_ST;
 float4 _NormalMap_ST;
 float4 _EmissionMap_ST;
 float4 _Color;
+float4 _BaseMap_ST;
+half4 _BaseColor;
 float3 _EmissionColor;
 half _NormalScale;
 half _SpecularScale;
 half _Smoothness;
 half _EnviIntensity;
+half _Metallic;
+half _BumpScale;
+half _OcclusionStrength;
 
 int _boneTextureBlockWidth;
 int _boneTextureBlockHeight;
@@ -123,41 +130,28 @@ half4 skinning(inout appdata v)
 
 	half3 localNormPre = mul(v.normal.xyz, (float3x3)localToWorldMatrixPre);
 	half3 localNormNext = mul(v.normal.xyz, (float3x3)localToWorldMatrixNext);
-	v.normal = normalize(lerp(localNormPre, localNormNext, curFrame - preFrame));
+	half3 localNorm = lerp(localNormPre, localNormNext, curFrame - preFrame);
 	half3 localTanPre = mul(v.tangent.xyz, (float3x3)localToWorldMatrixPre);
 	half3 localTanNext = mul(v.tangent.xyz, (float3x3)localToWorldMatrixNext);
-	v.tangent.xyz = normalize(lerp(localTanPre, localTanNext, curFrame - preFrame));
+	half3 localTan = lerp(localTanPre, localTanNext, curFrame - preFrame);
 
-	half4x4 localToWorldMatrixPreAni = loadMatFromTexture(preAniFrame, bone.x);
+	half4x4 localToWorldMatrixPreAni = loadMatFromTexture(preAniFrame, bone.x) * w.x;
+	localToWorldMatrixPreAni += loadMatFromTexture(preAniFrame, bone.y) * max(0, w.y);
+	localToWorldMatrixPreAni += loadMatFromTexture(preAniFrame, bone.z) * max(0, w.z);
+	localToWorldMatrixPreAni += loadMatFromTexture(preAniFrame, bone.w) * max(0, w.w);
 	half4 localPosPreAni = mul(v.vertex, localToWorldMatrixPreAni);
-	localPos = lerp(localPos, localPosPreAni, (1.0f - progress) * (preAniFrame > 0.0f));
+	half3 localNormPreAni = mul(v.normal.xyz, (float3x3)localToWorldMatrixPreAni);
+	half3 localTanPreAni = mul(v.tangent.xyz, (float3x3)localToWorldMatrixPreAni);
+	float transitionAmount = (1.0f - progress) * (preAniFrame > 0.0f);
+	localPos = lerp(localPos, localPosPreAni, transitionAmount);
+	v.normal = normalize(lerp(localNorm, localNormPreAni, transitionAmount));
+	v.tangent.xyz = normalize(lerp(localTan, localTanPreAni, transitionAmount));
 	return localPos;
 }
 
 half4 skinningShadow(inout appdata v)
 {
-	half4 bone = half4(v.texcoord2.x, v.texcoord2.y, v.texcoord2.z, v.texcoord2.w);
-#if (SHADER_TARGET < 30 || SHADER_API_GLES)
-	float curFrame = frameIndex;
-	float preAniFrame = preFrameIndex;
-	float progress = transitionProgress;
-#else
-	float curFrame = UNITY_ACCESS_INSTANCED_PROP(frameIndex_arr, frameIndex);
-	float preAniFrame = UNITY_ACCESS_INSTANCED_PROP(preFrameIndex_arr, preFrameIndex);
-	float progress = UNITY_ACCESS_INSTANCED_PROP(transitionProgress_arr, transitionProgress);
-#endif
-	int preFrame = curFrame;
-	int nextFrame = curFrame + 1.0f;
-	half4x4 localToWorldMatrixPre = loadMatFromTexture(preFrame, bone.x);
-	half4x4 localToWorldMatrixNext = loadMatFromTexture(nextFrame, bone.x);
-	half4 localPosPre = mul(v.vertex, localToWorldMatrixPre);
-	half4 localPosNext = mul(v.vertex, localToWorldMatrixNext);
-	half4 localPos = lerp(localPosPre, localPosNext, curFrame - preFrame);
-	half4x4 localToWorldMatrixPreAni = loadMatFromTexture(preAniFrame, bone.x);
-	half4 localPosPreAni = mul(v.vertex, localToWorldMatrixPreAni);
-	localPos = lerp(localPos, localPosPreAni, (1.0f - progress) * (preAniFrame > 0.0f));
-	//half4 localPos = v.vertex;
-	return localPos;
+	return skinning(v);
 }
 
 void vert(inout appdata v)

@@ -1,0 +1,21 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.3.11f1
+CRC: 2398676828
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: ff22c9ff0bcf8c30184f55957b4657ad
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 5ad585dd02dfb5016c0dad519eab8f49
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: 9a3c221dec78ed16ab5d4b59d86684db
+HashAppended: 0
+ClassTypes:
+- Class: 49
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/AnimationTexture/Instancing_FootmanPBR.bytes
+Dependencies: []

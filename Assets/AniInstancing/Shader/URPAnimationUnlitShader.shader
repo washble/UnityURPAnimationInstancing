@@ -1,4 +1,4 @@
-Shader "Custom/URPUnlitShader"
+Shader "AnimationInstancing/URPUnlitShader"
 {
     Properties
     {

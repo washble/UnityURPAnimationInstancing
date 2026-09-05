@@ -1,23 +1,34 @@
-Shader "Custom/URPAnimationLitShader"
+Shader "AnimationInstancing/URPAnimationLitShader"
 {
     Properties
     {
-    	[Header(Base)]
-        _Color("Color", Color) = (1,1,1,1)
-        _MainTex("Texture", 2D) = "white" {}
+		[Header(Base)]
+        [MainTexture] _BaseMap("Base Map", 2D) = "white" {}
+        [MainColor] _BaseColor("Base Color", Color) = (1,1,1,1)
+        [HideInInspector] _MainTex("Legacy Texture", 2D) = "white" {}
+        [HideInInspector] _Color("Legacy Color", Color) = (1,1,1,1)
     	
+		[Space(20)][Header(Metallic)]
+        _Metallic("Metallic", Range(0, 1)) = 0
+        [NoScaleOffset] _MetallicGlossMap("Metallic Map", 2D) = "white" {}
+        _Smoothness("Smoothness", Range(0, 1)) = 0.5
+
     	[Space(20)][Header(Normal)]
-    	[NoScaleOffset][Normal] _NormalMap("Normal Map", 2D) = "bump" {}
-        _NormalScale("Normal Scale", Float) = 1
+		[NoScaleOffset][Normal] _BumpMap("Normal Map", 2D) = "bump" {}
+        _BumpScale("Normal Scale", Float) = 1
+        [HideInInspector] _NormalMap("Legacy Normal Map", 2D) = "bump" {}
+        [HideInInspector] _NormalScale("Legacy Normal Scale", Float) = 1
+
+        [Space(20)][Header(Occlusion)]
+        [NoScaleOffset] _OcclusionMap("Occlusion Map", 2D) = "white" {}
+        _OcclusionStrength("Occlusion Strength", Range(0, 1)) = 1
     	
     	[Space(20)][Header(Emission)]
     	[Toggle(_EMISSION_ON)] _EMISSION_ON("Emission On", Float) = 0
     	[NoScaleOffset] _EmissionMap("Emission Map", 2D) = "black" {}
 		[HDR] _EmissionColor("Emission Color", Color) = (0, 0, 0)
     	
-        [Space(20)][Header(Smoothness)]
-    	[Toggle(_SMOOTHNESS_ON)] _SMOOTHNESS_ON("Smoothness On", Float) = 0
-    	_Smoothness("Smoothness", Float) = 30
+	    [HideInInspector][Toggle(_SMOOTHNESS_ON)] _SMOOTHNESS_ON("Legacy Smoothness On", Float) = 0
     	
     	[Space(20)][Header(Ambient)]
     	[Toggle(_AMBIENT_ON)] _AMBIENT_ON("Ambient On", Float) = 0
@@ -36,7 +47,7 @@ Shader "Custom/URPAnimationLitShader"
         Pass
         {
         	Name "ForwardLit"
-        	Tags{ "LightMode" = "UniversalForward" }
+			Tags{ "LightMode" = "UniversalForwardOnly" }
         	
             Blend SrcAlpha OneMinusSrcAlpha
 			ZWrite On
@@ -48,22 +59,25 @@ Shader "Custom/URPAnimationLitShader"
 			#pragma target 3.0
 
             // Universal Pipeline keywords
-			#pragma shader_feature_local _ _MAIN_LIGHT_SHADOWS
-			#pragma shader_feature_local _ _MAIN_LIGHT_SHADOWS_CASCADE
-			#pragma shader_feature_local _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
-			#pragma shader_feature_local _ _ADDITIONAL_LIGHT_SHADOWS
-			#pragma shader_feature_local _ _SHADOWS_SOFT
-			//#pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
-			//#pragma multi_compile _ LIGHTMAP_SHADOW_MIXING
-			#pragma shader_feature_local _ SHADOWS_SHADOWMASK
+			#pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+			#pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+			#pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
+			#pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
+			#pragma multi_compile_fragment _ _LIGHT_COOKIES
+			#pragma multi_compile _ _LIGHT_LAYERS
+			#pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
+			#pragma multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
+			#pragma multi_compile_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
+			#pragma multi_compile_fragment _ _REFLECTION_PROBE_ATLAS
+			#pragma multi_compile_fragment _ REFLECTION_PROBE_ROTATION
 			
 			#pragma shader_feature_local _NORMALMAP
 			#pragma shader_feature_local_fragment _ALPHATEST_ON
 			#pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 			#pragma shader_feature_local_fragment _EMISSION
-			//#pragma shader_feature_local_fragment _METALLICSPECGLOSSMAP
-			//#pragma shader_feature_local_fragment _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
-			//#pragma shader_feature_local_fragment _OCCLUSIONMAP
+			#pragma shader_feature_local_fragment _METALLICSPECGLOSSMAP
+			#pragma shader_feature_local_fragment _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
+			#pragma shader_feature_local_fragment _OCCLUSIONMAP
 			//#pragma shader_feature_local _PARALLAXMAP
 			//#pragma shader_feature_local _ _DETAIL_MULX2 _DETAIL_SCALED
 			#pragma shader_feature_local_fragment _SPECULARHIGHLIGHTS_OFF
@@ -76,6 +90,9 @@ Shader "Custom/URPAnimationLitShader"
 			// Unity defined keywords
 			#pragma multi_compile _ DIRLIGHTMAP_COMBINED
 			#pragma multi_compile _ LIGHTMAP_ON
+			#pragma multi_compile _ LIGHTMAP_SHADOW_MIXING
+			#pragma multi_compile _ SHADOWS_SHADOWMASK
+			#pragma multi_compile _ _CLUSTER_LIGHT_LOOP
 			#pragma multi_compile_fog
 			//--------------------------------------
 			// GPU Instancing
@@ -117,7 +134,7 @@ Shader "Custom/URPAnimationLitShader"
 
             	vert(v);
                 o.vertex = TransformObjectToHClip(v.vertex.xyz);
-                o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
+				o.uv = TRANSFORM_TEX(v.texcoord, _BaseMap);
                 o.worldPosition = TransformObjectToWorld(v.vertex.xyz);
 				o.normal = normalize(TransformObjectToWorldNormal(v.normal));
             	o.viewDirection = normalize(_WorldSpaceCameraPos.xyz - o.worldPosition.xyz);
@@ -129,67 +146,125 @@ Shader "Custom/URPAnimationLitShader"
                 return o;
             }
 
-            half3 AdditionalLighting(Light light, half3 normalWS)
-			{
-				half3 attenuatedLightColor = light.color * (light.distanceAttenuation * light.shadowAttenuation);
-				return LightingLambert(attenuatedLightColor, light.direction, normalWS);
-			}
-
-            half3 GetSafeNormalize(half3 lightDirection, half3 viewDirection)
+            half4 SampleMetallicGloss(float2 uv, half albedoAlpha)
             {
-	            return SafeNormalize(lightDirection + viewDirection);
+                half4 metallicGloss;
+
+                #if defined(_METALLICSPECGLOSSMAP)
+                metallicGloss = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, uv);
+                #if defined(_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A)
+                metallicGloss.a = albedoAlpha * _Smoothness;
+                #else
+                metallicGloss.a *= _Smoothness;
+                #endif
+                #else
+                metallicGloss = half4(_Metallic, _Metallic, _Metallic, _Smoothness);
+                #endif
+
+                return metallicGloss;
+            }
+
+            half SampleOcclusion(float2 uv)
+            {
+                #if defined(_OCCLUSIONMAP)
+                half occlusion = SAMPLE_TEXTURE2D(_OcclusionMap, sampler_OcclusionMap, uv).g;
+                return LerpWhiteTo(occlusion, _OcclusionStrength);
+                #else
+                return half(1.0);
+                #endif
             }
             
             float4 frag (v2f i) : SV_Target
             {
-				half4 color = _MainTex.Sample(sampler_MainTex, i.uv) * _Color;
+                half4 albedoAlpha = SampleAlbedoAlpha(i.uv, TEXTURE2D_ARGS(_BaseMap, sampler_BaseMap));
+                SurfaceData surfaceData = (SurfaceData)0;
+                surfaceData.alpha = albedoAlpha.a * _BaseColor.a;
+                surfaceData.albedo = albedoAlpha.rgb * _BaseColor.rgb;
 
-				float3 NormalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, i.uv), _NormalScale);
+				half4 metallicGloss = SampleMetallicGloss(i.uv, albedoAlpha.a);
+                surfaceData.metallic = metallicGloss.r;
+                surfaceData.smoothness = metallicGloss.a;
+                surfaceData.specular = half3(0.0h, 0.0h, 0.0h);
+
+				float3 NormalTS = SampleNormal(i.uv, TEXTURE2D_ARGS(_BumpMap, sampler_BumpMap), _BumpScale);
                 float3x3 tbnMatrix = float3x3(i.tangent, i.biTangent, i.normal);
                 float3 normalWS = normalize(mul(NormalTS, tbnMatrix));
+                surfaceData.normalTS = NormalTS;
+                surfaceData.occlusion = SampleOcclusion(i.uv);
+                #if defined(_EMISSION_ON) || defined(_EMISSION)
+                surfaceData.emission = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, i.uv).rgb * _EmissionColor.rgb;
+                #endif
 
-				Light mainLight = GetMainLight(i.shadowCoord);
-            	half3 lighting = AdditionalLighting(mainLight, normalWS);
+				BRDFData brdfData;
+                InitializeBRDFData(surfaceData, brdfData);
 
-            	float3 specColor = 0;
-				#if defined(_SMOOTHNESS_ON)
-            		half3 reflectDirection = reflect(-mainLight.direction, normalWS);
-	                half spec = saturate(dot(reflectDirection, i.viewDirection));
-	                spec = pow(spec, _Smoothness);
-            		specColor += spec * mainLight.color;
-				#endif
+				InputData inputData = (InputData)0;
+                inputData.positionWS = i.worldPosition;
+                inputData.normalWS = normalWS;
+                inputData.viewDirectionWS = SafeNormalize(i.viewDirection);
+                inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.vertex);
+                inputData.shadowCoord = i.shadowCoord;
+                inputData.shadowMask = half4(1.0h, 1.0h, 1.0h, 1.0h);
+				#if defined(_AMBIENT_ON)
+                inputData.bakedGI = SampleSH(normalWS) * _EnviIntensity;
+                #endif
 
-				half3 addLighting = 0;
-            	int additionalLightsCount = GetAdditionalLightsCount();
-				for (int index = 0; index < additionalLightsCount; ++index)
+				#if defined(_SPECULARHIGHLIGHTS_OFF)
+                bool specularHighlightsOff = true;
+                #else
+                bool specularHighlightsOff = false;
+                #endif
+
+				const BRDFData noClearCoat = (BRDFData)0;
+				half4 shadowMask = CalculateShadowMask(inputData);
+                AmbientOcclusionFactor aoFactor = CreateAmbientOcclusionFactor(inputData, surfaceData);
+				uint meshRenderingLayers = GetMeshRenderingLayer();
+				Light mainLight = GetMainLight(inputData, shadowMask, aoFactor);
+                MixRealtimeAndBakedGI(mainLight, normalWS, inputData.bakedGI);
+
+				half3 lighting = 0;
+                #ifdef _LIGHT_LAYERS
+                if (IsMatchingLightLayer(mainLight.layerMask, meshRenderingLayers))
+                #endif
                 {
-                    Light addLight = GetAdditionalLight(index, i.worldPosition);
-					float3 addLightResult = AdditionalLighting(addLight, normalWS);
-
-					#if defined(_SMOOTHNESS_ON)
-						half3 reflectDirection = reflect(-addLight.direction, normalWS);
-		                half spec = saturate(dot(reflectDirection, i.viewDirection));
-						specColor += pow(spec, _Smoothness) * addLight.color;
-					#endif
-					
-					addLighting += addLightResult;
+					lighting += LightingPhysicallyBased(brdfData, noClearCoat, mainLight, normalWS, inputData.viewDirectionWS, 0.0h, specularHighlightsOff);
                 }
 
-                half3 ambient = 0;
-            	#if defined(_AMBIENT_ON)
-					ambient = SampleSH(normalWS) * _EnviIntensity;
-            	#endif
-
-				color.rgb = color.rgb * (lighting + addLighting + ambient) + specColor;
-
-            	#if defined(_EMISSION_ON)
-                half3 emission = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, i.uv).rgb;
-					color.rgb += emission * _EmissionColor;
+				half3 addLighting = 0;
+				#if defined(_ADDITIONAL_LIGHTS)
+				#if USE_CLUSTER_LIGHT_LOOP
+				[loop] for (uint lightIndex = 0u; lightIndex < min(URP_FP_DIRECTIONAL_LIGHTS_COUNT, MAX_VISIBLE_LIGHTS); ++lightIndex)
+				{
+					Light addLight = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
+                    #ifdef _LIGHT_LAYERS
+                    if (IsMatchingLightLayer(addLight.layerMask, meshRenderingLayers))
+                    #endif
+					{
+						addLighting += LightingPhysicallyBased(brdfData, noClearCoat, addLight, normalWS, inputData.viewDirectionWS, 0.0h, specularHighlightsOff);
+					}
+				}
 				#endif
-            	
-            	color.rgb = MixFog(color.rgb, i.fogCoord.x);
-            	
-				return color;
+				LIGHT_LOOP_BEGIN(GetAdditionalLightsCount())
+                {
+                    Light addLight = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
+                    #ifdef _LIGHT_LAYERS
+                    if (IsMatchingLightLayer(addLight.layerMask, meshRenderingLayers))
+                    #endif
+                    {
+						addLighting += LightingPhysicallyBased(brdfData, noClearCoat, addLight, normalWS, inputData.viewDirectionWS, 0.0h, specularHighlightsOff);
+                    }
+                }
+				LIGHT_LOOP_END
+				#endif
+
+				half3 indirectLighting = 0;
+				#if defined(_AMBIENT_ON)
+				indirectLighting = GlobalIllumination(brdfData, noClearCoat, 0.0h, inputData.bakedGI, surfaceData.occlusion,
+					i.worldPosition, normalWS, inputData.viewDirectionWS, inputData.normalizedScreenSpaceUV);
+				#endif
+
+				half3 finalColor = lighting + addLighting + indirectLighting + surfaceData.emission;
+				return half4(MixFog(finalColor, i.fogCoord.x), surfaceData.alpha);
             }
             ENDHLSL
         }

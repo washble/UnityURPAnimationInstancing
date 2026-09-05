@@ -1,0 +1,12 @@
+ManifestFileVersion: 0
+UnityVersion: 6000.3.11f1
+CRC: 2255801978
+HashAppended: 0
+AssetBundleManifest:
+  AssetBundleInfos:
+    Info_0:
+      Name: unifiedraytracing
+      Dependencies: {}
+    Info_1:
+      Name: animationtexture
+      Dependencies: {}
