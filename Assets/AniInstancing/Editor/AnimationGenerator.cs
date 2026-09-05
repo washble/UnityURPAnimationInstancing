@@ -698,6 +698,7 @@ namespace AnimationInstancing
             }
 
             file.Close();
+            AssetDatabase.Refresh();
             aniInfo.Clear();
         }
 
